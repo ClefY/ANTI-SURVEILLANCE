@@ -33,10 +33,9 @@ $IPT -A INPUT -i lo -j ACCEPT
 $IPT -A INPUT ! -i lo -s 127.0.0.1/8 -j DROP
 $IPT -A OUTPUT -o lo -j ACCEPT
 
-# allow ping, icmp echo-reply and MTU, drop others to defend ICMP SMURF ATTACKS
+# allow ping out, icmp echo-reply and fragment request, drop others to defend ICMP SMURF ATTACKS
 $IPT -A INPUT -i $ITF -p icmp --icmp-type 0 -m limit --limit 2/s $RED -j ACCEPT
-$IPT -A INPUT -i $ITF -p icmp --icmp-type fragmentation-needed $RED -j ACCEPT
-$IPT -A INPUT -i $ITF -p icmp -j DROP
+$IPT -A INPUT -i $ITF -p icmp --icmp-type fragmentation-needed $NEW -j ACCEPT
 $IPT -A OUTPUT -o $ITF -p icmp $NED -j ACCEPT 
 
 # drop bad ip
@@ -70,7 +69,13 @@ $IPT -A INPUT -p tcp --tcp-flags ALL FIN,PSH,URG -j DROP
 $IPT -A INPUT -p tcp --tcp-flags ALL SYN,FIN,PSH,URG -j DROP
 $IPT -A INPUT -p tcp --tcp-flags ALL SYN,RST,ACK,PSH,URG -j DROP
 
-# string filter
+# string filter and log them
+$IPT -A INPUT -i $ITF -m string --algo bm --string "bin/sh" -j LOG --log-prefix "bin/sh filterd" --log-level 7
+$IPT -A INPUT -i $ITF -m string --algo bm --string "bin/sh" -j DROP
+$IPT -A INPUT -i $ITF -m string --algo bm --string "bin/bash" -j LOG --log-prefix "bin/bash filterd" --log-level 7
+$IPT -A INPUT -i $ITF -m string --algo bm --string "bin/bash" -j DROP
+$IPT -A INPUT -i $ITF -m string --algo bm --string "tftp" -j LOG --log-prefix "tftp filterd" --log-level 7
+$IPT -A INPUT -i $ITF -m string --algo bm --string "tftp" -j DROP
 
 # allow dns
 for ip in $DNS
@@ -83,8 +88,11 @@ for ip in $DNS
 $IPT -A INPUT -i $ITF -p udp --sport 123 -d $LIP $EED -j ACCEPT
 $IPT -A OUTPUT -o $ITF -p udp -s $LIP --dport 123 $NED -j ACCEPT
 
-# drop all else udp, if you need open others udp ports, add these above this line
+# if you need open others udp ports, add these above this line
+# drop all else udp and log them
+$IPT -A INPUT -i $ITF -p udp -j LOG --log-prefix "IN_UDP droped" --log-level 7
 $IPT -A INPUT -i $ITF -p udp -j DROP
+$IPT -A INPUT -i $ITF -p udp -j LOG --log-prefix "OUT_UDP droped" --log-level 7
 $IPT -A OUTPUT -o $ITF -p udp -j DROP
 
 # allow ssh, http and https
@@ -92,7 +100,7 @@ $IPT -A INPUT -i $ITF -p tcp --sport 22,80,443 -d $LIP $EED -j ACCEPT
 $IPT -A OUTPUT -o $ITF -p tcp -s $LIP --dport 22,80,443 $NED -j ACCEPT
 
 # if you need open others tcp ports, add these above this line
-# drop all eles and log them
+# drop all else and log them
 $IPT -A INPUT -j LOG --log-prefix "IPT_droped" --log-level 7
 $IPT -A FORWARD -j LOG --log-prefix "FWD_droped" --log-level 7
 $IPT -A OUTPUT -j LOG --log-prefix "OUT_droped" --log-level 7
